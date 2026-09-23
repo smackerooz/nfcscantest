@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NFC Scan Test</title>
+<style>
+  :root {
+    --bg: #f2f1ec;
+    --surface: #ffffff;
+    --ink: #1c2530;
+    --ink-soft: #5b6672;
+    --line: #dcdfd8;
+    --accent: #2f6f5e;
+    --accent-soft: #e4ede9;
+    --warn: #b9761f;
+    --warn-soft: #f6ead7;
+    --bad: #a63f3f;
+    --bad-soft: #f5e3e1;
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --bg: #14181d;
+      --surface: #1c222a;
+      --ink: #e7e9e4;
+      --ink-soft: #9aa3ab;
+      --line: #303a44;
+      --accent-soft: #1e2e29;
+      --warn-soft: #302818;
+      --bad-soft: #2e1f1f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181d;
+    --surface: #1c222a;
+    --ink: #e7e9e4;
+    --ink-soft: #9aa3ab;
+    --line: #303a44;
+    --accent-soft: #1e2e29;
+    --warn-soft: #302818;
+    --bad-soft: #2e1f1f;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); height: 100%; }
+  body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    padding: env(safe-area-inset-top, 0px) 16px env(safe-area-inset-bottom, 0px) 16px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 20px 0 40px 0; }
+  h1 { font-size: 20px; margin: 0 0 4px 0; }
+  .sub { color: var(--ink-soft); font-size: 13.5px; margin: 0 0 20px 0; line-height: 1.5; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .capline { display:flex; align-items:center; gap:8px; font-size: 13.5px; margin-bottom: 6px; }
+  .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .dot.ok { background: var(--accent); }
+  .dot.bad { background: var(--bad); }
+
+  .scanzone {
+    display:flex; flex-direction:column; align-items:center; text-align:center;
+    padding: 28px 16px; border: 2px dashed var(--line); border-radius: 14px; margin-bottom: 14px;
+    transition: border-color .2s ease;
+  }
+  .scanzone.active { border-color: var(--accent); }
+  .ring {
+    width:64px; height:64px; border-radius:50%; border:2.5px solid var(--accent);
+    display:flex; align-items:center; justify-content:center; color: var(--accent); margin-bottom: 12px;
+  }
+  .ring.pulse { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{ box-shadow: 0 0 0 0 rgba(47,111,94,.25);} 50%{ box-shadow: 0 0 0 10px rgba(47,111,94,0);} }
+
+  button {
+    font: inherit; font-weight: 600; font-size: 14.5px; padding: 12px 22px; border-radius: 10px;
+    border: 1px solid var(--ink); background: var(--ink); color: var(--surface); cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  button:disabled { opacity: .45; cursor: default; }
+
+  .log { display:flex; flex-direction:column; gap:8px; max-height: 40vh; overflow-y:auto; }
+  .entry { border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height:1.5; }
+  .entry.ok { background: var(--accent-soft); }
+  .entry.warn { background: var(--warn-soft); }
+  .entry.bad { background: var(--bad-soft); }
+  .entry .t { font-size:11px; color: var(--ink-soft); font-family: monospace; display:block; margin-bottom:2px; }
+  .empty { color: var(--ink-soft); font-size: 13px; font-style: italic; text-align:center; padding: 10px 0; }
+
+  details { font-size: 13px; color: var(--ink-soft); line-height: 1.6; }
+  details summary { cursor: pointer; color: var(--ink); font-weight: 600; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📡 NFC Scan Test</h1>
+  <p class="sub">Checks whether this phone's browser can pick up a tapped card via Web NFC, and shows exactly what (if anything) it reads back.</p>
+
+  <div class="card">
+    <div class="capline"><span class="dot" id="dot-api"></span><span id="txt-api">Checking Web NFC support…</span></div>
+    <div class="capline"><span class="dot" id="dot-secure"></span><span id="txt-secure">Checking secure context…</span></div>
+    <div class="capline" style="margin-bottom:0;"><span class="dot" id="dot-ua"></span><span id="txt-ua">Checking browser…</span></div>
+  </div>
+
+  <div class="scanzone" id="scanzone">
+    <div class="ring" id="ring">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9a5 5 0 0 1 9-3M20 15a5 5 0 0 1-9 3M9 9l6 6M15 9a2 2 0 1 0-4 0m4 6a2 2 0 1 1-4 0"/></svg>
+    </div>
+    <div id="scanstatus" style="font-size:14px; margin-bottom:14px;">Not scanning yet.</div>
+    <button id="btn-start">Start scanning</button>
+    <button id="btn-stop" class="ghost" style="display:none; margin-top:8px;">Stop</button>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:600; font-size:14px; margin-bottom:10px;">Scan log</div>
+    <div class="log" id="log"><div class="empty">No scans yet.</div></div>
+  </div>
+
+  <details>
+    <summary>Reading the results</summary>
+    <p><b>Green "Tag detected, has NDEF data"</b> — the card uses the NDEF format. You'll see a serial number and any stored records.</p>
+    <p><b>Orange "Tag sensed but not readable as NDEF"</b> — very likely what you'll get from an EZ-Link card. Your phone's NFC antenna <i>did</i> detect the card, but EZ-Link uses ISO 14443 Type B / CEPAS, a proprietary protocol, not NDEF. This is a browser/format limitation, not proof the antenna is faulty.</p>
+    <p><b>Nothing happens at all when tapping</b> — try tapping a known plain NFC tag (e.g. a blank NTAG213/215 sticker, common and cheap) as a control test. If that also produces nothing, the issue is likely antenna positioning (try the upper-back of the phone, different exact spot) or that NFC is switched off in Android Settings. If a plain tag works but the EZ-Link doesn't, that confirms the format limitation above rather than a hardware problem.</p>
+  </details>
+</div>
+
+<script>
+(function(){
+  const dotApi = document.getElementById('dot-api'), txtApi = document.getElementById('txt-api');
+  const dotSecure = document.getElementById('dot-secure'), txtSecure = document.getElementById('txt-secure');
+  const dotUa = document.getElementById('dot-ua'), txtUa = document.getElementById('txt-ua');
+  const scanzone = document.getElementById('scanzone');
+  const ring = document.getElementById('ring');
+  const scanstatus = document.getElementById('scanstatus');
+  const btnStart = document.getElementById('btn-start');
+  const btnStop = document.getElementById('btn-stop');
+  const log = document.getElementById('log');
+
+  const hasNDEF = 'NDEFReader' in window;
+  dotApi.className = 'dot ' + (hasNDEF ? 'ok' : 'bad');
+  txtApi.textContent = hasNDEF ? 'Web NFC (NDEFReader) is available.' : 'Web NFC is NOT available in this browser.';
+
+  const isSecure = window.isSecureContext;
+  dotSecure.className = 'dot ' + (isSecure ? 'ok' : 'bad');
+  txtSecure.textContent = isSecure ? 'Running in a secure context (HTTPS).' : 'Not a secure context — Web NFC requires HTTPS.';
+
+  const ua = navigator.userAgent;
+  const isAndroid = /Android/i.test(ua);
+  const isChrome = /Chrome\/[0-9.]+/i.test(ua) && !/OPR|Edg|SamsungBrowser/i.test(ua);
+  const uaOk = isAndroid && isChrome;
+  dotUa.className = 'dot ' + (uaOk ? 'ok' : 'bad');
+  txtUa.textContent = uaOk ? 'Android + Chrome detected — good.' : 'This looks like a browser Web NFC likely won\'t work in (needs Chrome for Android).';
+
+  let firstEntry = true;
+  function addEntry(kind, text){
+    if(firstEntry){ log.innerHTML = ''; firstEntry = false; }
+    const div = document.createElement('div');
+    div.className = 'entry ' + kind;
+    const time = new Date().toLocaleTimeString();
+    div.innerHTML = `<span class="t">${time}</span>${text}`;
+    log.prepend(div);
+  }
+
+  let abortController = null;
+
+  async function startScan(){
+    if(!hasNDEF){
+      addEntry('bad', 'Cannot start — Web NFC is not available in this browser.');
+      return;
+    }
+    btnStart.disabled = true;
+    scanstatus.textContent = 'Requesting NFC permission…';
+    try {
+      abortController = new AbortController();
+      const reader = new NDEFReader();
+      await reader.scan({ signal: abortController.signal });
+
+      scanzone.classList.add('active');
+      ring.classList.add('pulse');
+      scanstatus.textContent = 'Scanning — hold the card near the NFC antenna (usually upper-back of phone).';
+      btnStop.style.display = 'inline-block';
+      addEntry('ok', 'Scan started successfully. Waiting for a tap…');
+
+      reader.onreading = (event) => {
+        const serial = event.serialNumber || '(no serial number reported)';
+        let recordInfo = 'No NDEF records found on this tag.';
+        if (event.message && event.message.records && event.message.records.length){
+          recordInfo = event.message.records.map(r => `${r.recordType}${r.mediaType ? ' ('+r.mediaType+')' : ''}`).join(', ');
+        }
+        addEntry('ok', `<b>Tag detected, has NDEF data.</b><br>Serial number: <code>${serial}</code><br>Records: ${recordInfo}`);
+      };
+
+      reader.onreadingerror = () => {
+        addEntry('warn', `<b>Tag sensed but not readable as NDEF.</b><br>This is the expected result for an EZ-Link / transit / bank card — see "Reading the results" below.`);
+      };
+
+    } catch(err){
+      btnStart.disabled = false;
+      scanstatus.textContent = 'Could not start scanning.';
+      addEntry('bad', `<b>${err.name}</b>: ${err.message || 'Unknown error'}`);
+    }
+  }
+
+  function stopScan(){
+    if(abortController) abortController.abort();
+    scanzone.classList.remove('active');
+    ring.classList.remove('pulse');
+    scanstatus.textContent = 'Stopped.';
+    btnStart.disabled = false;
+    btnStop.style.display = 'none';
+    addEntry('warn', 'Scanning stopped.');
+  }
+
+  btnStart.addEventListener('click', startScan);
+  btnStop.addEventListener('click', stopScan);
+
+  if(!hasNDEF || !isSecure){
+    btnStart.disabled = true;
+  }
+})();
+</script>
+</body>
+</html>
